@@ -2,6 +2,8 @@ Simple C# bot using the superb ExchangeSharp, Skender-TechnicalAnalysis and Mate
 
 This is just a a 2-day hackathon to build an app to monitor the top 20 coins on Binance-US and to notifiy me of the current MACD trends so that it would alert me to take a closer look.  This is just a play app and not really expecting any financial results from this but it just saves me time from having to log into my account to look at the TradingView charts.
 
+![alt text](https://github.com/hujanais/binance-crypto-app/blob/assets/binance-crypto-app.PNG)
+
 ## Some stretch goals
 1. I just didn't want to spend more than a day or 2 on this bot but it would have been nicer to have written this with .NET core so that I can run it on a Raspberry PI and a web interface to look at the charts but that is for another day.
 2. I would like to add in email notification when there is a buy signal at some point.
