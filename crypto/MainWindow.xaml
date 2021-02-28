@@ -1,0 +1,139 @@
+﻿<Window x:Class="crypto.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:crypto"
+        xmlns:converters="clr-namespace:crypto.Converters"
+        mc:Ignorable="d"
+        xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
+        TextElement.Foreground="{DynamicResource MaterialDesignBody}"
+        Background="{DynamicResource MaterialDesignPaper}"
+        TextElement.FontWeight="Regular"
+        TextElement.FontSize="13"
+        TextOptions.TextFormattingMode="Display"
+        TextOptions.TextRenderingMode="Auto"
+        FontFamily="{materialDesign:MaterialDesignFont}"
+        xmlns:lvc="clr-namespace:LiveCharts.Wpf;assembly=LiveCharts.Wpf"
+        Title="Binance Crypto-Alert"
+        Height="450"
+        Width="800">
+    <Grid>
+        <Grid.Resources>
+            <converters:TrendConverter x:Key="trendConverter" />
+            <converters:SignalConverter x:Key="signalConverter" />
+            <converters:TrendColorConverter x:Key="trendColorConverter" />
+        </Grid.Resources>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="2*" />
+        </Grid.RowDefinitions>
+
+        <StackPanel Orientation="Horizontal">
+            <Button Command="{Binding EnumeratePairsCommand}"
+                    Content="Enumerate"
+                    Margin="5" />
+            <ProgressBar Style="{DynamicResource MaterialDesignLinearProgressBar }"
+                         Minimum="0"
+                         Maximum="100"
+                         Value="{Binding ProgressPercentage}"
+                         Width="200"
+                         Height="20"
+                         VerticalAlignment="Center" />
+            <TextBlock Margin="5"
+                       VerticalAlignment="Center">Last Update: </TextBlock>
+            <TextBlock Text="{Binding LastUpdated}"
+                       Margin="5"
+                       VerticalAlignment="Center" />
+            <TextBlock Margin="5"
+                       VerticalAlignment="Center">Next Update:</TextBlock>
+            <TextBlock Text="{Binding NextUpdate}"
+                       Margin="5"
+                       VerticalAlignment="Center" />
+        </StackPanel>
+
+        <ListView Grid.Row="1"
+                  ItemsSource="{Binding Assets}"
+                  SelectedItem="{Binding SelectedAsset}">
+            <ListView.View>
+                <GridView>
+                    <GridViewColumn Header="Ticker"
+                                    DisplayMemberBinding="{Binding Ticker}" />
+                    <GridViewColumn Header="Price"
+                                    DisplayMemberBinding="{Binding Price}" />
+                    <GridViewColumn Header="Macd"
+                                    DisplayMemberBinding="{Binding MacdSummary.Macd, StringFormat={}{0:0.00}}" />
+                    <GridViewColumn Header="Macd Signal"
+                                    DisplayMemberBinding="{Binding MacdSummary.Signal, StringFormat={}{0:0.00}}" />
+                    <GridViewColumn Header="Macd Histogram"
+                                    DisplayMemberBinding="{Binding MacdSummary.Histogram, StringFormat={}{0:0.00}}" />
+                    <GridViewColumn Header="Macd Trend">
+                        <GridViewColumn.CellTemplate>
+                            <DataTemplate>
+                                <materialDesign:PackIcon Foreground="{Binding MacdSummary.TrendSignal, Converter={StaticResource trendColorConverter}}" Kind="{Binding MacdSummary.TrendSignal, Converter={StaticResource trendConverter}}"></materialDesign:PackIcon>
+                            </DataTemplate>                            
+                        </GridViewColumn.CellTemplate>
+                    </GridViewColumn>
+                    <GridViewColumn Header="Macd CrossOver">
+                        <GridViewColumn.CellTemplate>
+                            <DataTemplate>
+                                <TextBlock Foreground="{Binding MacdSummary.CrossOverSignal, Converter={StaticResource trendColorConverter}}" Text="{Binding MacdSummary.CrossOverSignal, Converter={StaticResource signalConverter}}"></TextBlock>
+                            </DataTemplate>
+                        </GridViewColumn.CellTemplate>
+                    </GridViewColumn>
+                </GridView>
+            </ListView.View>
+        </ListView>
+
+        <Grid Grid.Row="2">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="auto" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+            <StackPanel Orientation="Horizontal"
+                        Margin="5">
+                <TextBlock Text="{Binding SelectedAsset.Ticker}"
+                           Margin="5" />
+                <TextBlock Text="{Binding SelectedAsset.Price}"
+                           Margin="5" />
+                <TextBlock Text="{Binding SelectedAsset.MacdSummary.Histogram, StringFormat={}{0:0.00}}"
+                           Margin="5" />
+                <materialDesign:PackIcon VerticalAlignment="Center" 
+                                         Kind="{Binding SelectedAsset.MacdSummary.TrendSignal, Converter={StaticResource trendConverter}}"
+                                         Foreground="{Binding SelectedAsset.MacdSummary.TrendSignal, Converter={StaticResource trendColorConverter}}"></materialDesign:PackIcon>
+            </StackPanel>
+            <lvc:CartesianChart Grid.Row="1"
+                                DisableAnimations="True"
+                                Hoverable="False"
+                                DataTooltip="{x:Null}"
+                                Series="{Binding SeriesCollection}">
+                <lvc:CartesianChart.AxisY>
+                    <lvc:Axis Foreground="DodgerBlue"
+                              Title="Blue Axis">
+                            <lvc:Axis.Separator>
+                            <lvc:Separator Stroke="#cd2a27" />
+                            </lvc:Axis.Separator>
+                    </lvc:Axis>
+                </lvc:CartesianChart.AxisY>
+            </lvc:CartesianChart>
+            <lvc:CartesianChart Grid.Row="2"
+                                Hoverable="False"
+                                DataTooltip="{x:Null}"
+                                Series="{Binding MacdCollection}">
+                <lvc:CartesianChart.AxisY>
+                    <lvc:Axis Foreground="DodgerBlue"
+                              Title="Blue Axis">
+                        <lvc:Axis.Separator>
+                            <lvc:Separator Stroke="#cd2a27" />
+                        </lvc:Axis.Separator>
+                    </lvc:Axis>
+                </lvc:CartesianChart.AxisY>
+            </lvc:CartesianChart>
+        </Grid>
+
+
+
+    </Grid>
+</Window>
