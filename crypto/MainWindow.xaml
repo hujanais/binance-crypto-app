@@ -8,18 +8,25 @@
         mc:Ignorable="d"
         xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
         TextElement.Foreground="{DynamicResource MaterialDesignBody}"
-        Background="{DynamicResource MaterialDesignPaper}"
         TextElement.FontWeight="Regular"
         TextElement.FontSize="13"
         TextOptions.TextFormattingMode="Display"
         TextOptions.TextRenderingMode="Auto"
-        FontFamily="{materialDesign:MaterialDesignFont}"
+        Background="{DynamicResource MaterialDesignPaper}"
+        FontFamily="{DynamicResource MaterialDesignFont}"
         xmlns:lvc="clr-namespace:LiveCharts.Wpf;assembly=LiveCharts.Wpf"
         Title="Binance Crypto-Alert"
         Height="450"
         Width="800">
     <Grid>
         <Grid.Resources>
+            <Style TargetType="TextBlock">
+                <Setter Property="VerticalAlignment"
+                        Value="Center" />
+                <Setter Property="Margin"
+                        Value="5" />
+            </Style>
+
             <converters:TrendConverter x:Key="trendConverter" />
             <converters:SignalConverter x:Key="signalConverter" />
             <converters:TrendColorConverter x:Key="trendColorConverter" />
@@ -34,23 +41,25 @@
             <Button Command="{Binding EnumeratePairsCommand}"
                     Content="Enumerate"
                     Margin="5" />
-            <ProgressBar Style="{DynamicResource MaterialDesignLinearProgressBar }"
-                         Minimum="0"
-                         Maximum="100"
-                         Value="{Binding ProgressPercentage}"
-                         Width="200"
-                         Height="20"
-                         VerticalAlignment="Center" />
-            <TextBlock Margin="5"
-                       VerticalAlignment="Center">Last Update: </TextBlock>
-            <TextBlock Text="{Binding LastUpdated}"
-                       Margin="5"
-                       VerticalAlignment="Center" />
-            <TextBlock Margin="5"
-                       VerticalAlignment="Center">Next Update:</TextBlock>
-            <TextBlock Text="{Binding NextUpdate}"
-                       Margin="5"
-                       VerticalAlignment="Center" />
+            <TextBlock Text="Tick(hrs) " />
+            <ComboBox ItemsSource="{Binding TickTimes}" Width="70" Margin="5"
+                      SelectedItem="{Binding SelectedTickTime}"></ComboBox>
+            <Grid>
+                <ProgressBar Style="{DynamicResource MaterialDesignLinearProgressBar }"
+                             Minimum="0"
+                             Maximum="100"
+                             Value="{Binding ProgressPercentage}"
+                             Width="200"
+                             Height="20"
+                             VerticalAlignment="Center">
+                </ProgressBar>
+                <TextBlock HorizontalAlignment="Center"
+                           VerticalAlignment="Center" Text="{Binding ProgressBarMessage}"/>
+            </Grid>
+            <TextBlock >Last Update: </TextBlock>
+            <TextBlock Text="{Binding LastUpdated}" />
+            <TextBlock >Next Update:</TextBlock>
+            <TextBlock Text="{Binding NextUpdate}"/>
         </StackPanel>
 
         <ListView Grid.Row="1"

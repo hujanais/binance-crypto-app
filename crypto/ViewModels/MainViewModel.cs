@@ -9,6 +9,7 @@ using Skender.Stock.Indicators;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Configuration;
 using System.Diagnostics;
 using System.Linq;
 using System.Text;
@@ -23,15 +24,18 @@ namespace crypto.ViewModels
     {
         #region Fields
 
-        const int THIRTYMINUTES_MS = 30 * 60 * 1000;
+        const int TENMINUTES_MS = 10 * 60 * 1000;
         private ExchangeSharp.ExchangeBinanceUSAPI api;
         private IWebSocket socket;
 
         private int progressPercentage = 0;
         private DateTime lastUpdated;
         private DateTime nextUpdate;
+        private Timer stateTimer;
+        private string progressBarMessage = "...";
 
         private Asset selectedAsset;
+        private double selectedTickTime;
 
         private ChartValues<double> closeChartValues = new ChartValues<double>();
         private ChartValues<double> macdChartValues = new ChartValues<double>();
@@ -47,6 +51,31 @@ namespace crypto.ViewModels
         #endregion
 
         #region Properties
+
+        /// <summary>
+        /// The candle resolution in hours.
+        /// </summary>
+        public IList<double> TickTimes { get; private set; }
+
+        public double SelectedTickTime
+        {
+            get => this.selectedTickTime;
+            set
+            {
+                this.selectedTickTime = value;
+                this.RaisePropertyChanged(nameof(this.SelectedTickTime));
+            }
+        }
+
+        public string ProgressBarMessage
+        {
+            get => this.progressBarMessage;
+            set
+            {
+                this.progressBarMessage = value;
+                this.RaisePropertyChanged(nameof(this.ProgressBarMessage));
+            }
+        }
 
         public Asset SelectedAsset
         {
@@ -102,6 +131,9 @@ namespace crypto.ViewModels
             // Initialize the api.
             api = new ExchangeSharp.ExchangeBinanceUSAPI();
 
+            // load in the api keys.
+            api.LoadAPIKeysUnsecure(ConfigurationManager.AppSettings.Get("PublicKey"), ConfigurationManager.AppSettings.Get("SecretKey"));
+
             // ICommand binding
             this.EnumeratePairsCommand = new RelayCommand(this.executeEnumerate);
 
@@ -115,13 +147,20 @@ namespace crypto.ViewModels
             this.MacdCollection.Add(new LineSeries() { Values = macdChartValues, ScalesYAt = 0, Fill = Brushes.Transparent, PointGeometrySize = 0 });
             this.MacdCollection.Add(new LineSeries() { Values = macdSignalChartValues, ScalesYAt = 0, Fill = Brushes.Transparent, PointGeometrySize = 0 });
             this.MacdCollection.Add(new LineSeries() { Values = macdHistogramChartValues, ScalesYAt = 0, Fill = Brushes.Transparent, PointGeometrySize = 0 });
+
+            this.TickTimes = new ObservableCollection<double> { 0.25, 0.5, 1, 2, 4, 8, 12, 24 };
+            this.SelectedTickTime = 12;
         }
 
+        /// <summary>
+        /// You can call this method multiple times with no issues.
+        /// </summary>
         private async void executeEnumerate()
         {
             // Get a list of markets.
             var pairs = (await api.GetTickersAsync()).Where(p => p.Value.MarketSymbol.Contains("USDT") && !p.Value.MarketSymbol.Contains("USDTUSD")).Take(20).ToList();
-            pairs.ForEach(pair => {
+            pairs.ForEach(pair =>
+            {
                 this.Assets.Add(new Asset(pair.Value.MarketSymbol));
             });
 
@@ -146,15 +185,19 @@ namespace crypto.ViewModels
                 }, tickers);
             }
 
-            // Run the timer event.
-            var stateTimer = new Timer((stateObj) => executeStart(stateObj));
-            stateTimer.Change(500, THIRTYMINUTES_MS);
+            // start the timer event.
+            if (stateTimer != null)
+            {
+                stateTimer.Dispose();
+            }
+            stateTimer = new Timer((stateObj) => executeStart(stateObj));
+            stateTimer.Change(500, TENMINUTES_MS);
         }
 
         private async void executeStart(Object stateInfo)
         {
             this.LastUpdated = DateTime.Now;
-            this.NextUpdate = this.LastUpdated.AddMilliseconds(THIRTYMINUTES_MS);
+            this.NextUpdate = this.LastUpdated.AddMilliseconds(TENMINUTES_MS);
 
             // some cleanup.
             ProgressPercentage = 0;
@@ -163,11 +206,13 @@ namespace crypto.ViewModels
             var tickers = this.Assets.Select(p => p.Ticker).ToArray();
             numOfTickers = tickers.Count();
 
-            await Task.Factory.StartNew(async () => {
-                for (int idx = 0; idx < numOfTickers; idx++) 
+            await Task.Factory.StartNew(async () =>
+            {
+                for (int idx = 0; idx < numOfTickers; idx++)
                 {
                     var ticker = tickers[idx];
-                    var candles = await api.GetCandlesAsync(ticker, 43200, null, DateTime.UtcNow, 240);
+                    int periodSeconds = Convert.ToInt32(selectedTickTime * 60 * 60);
+                    var candles = await api.GetCandlesAsync(ticker, periodSeconds, null, DateTime.UtcNow, 240);
                     IList<IQuote> quotes = new List<IQuote>();
                     candles.ToList().ForEach(data =>
                     {
@@ -177,9 +222,10 @@ namespace crypto.ViewModels
                     var asset = this.Assets.First(a => a.Ticker == ticker);
                     asset.updateQuotes(quotes);
 
-                    this.ProgressPercentage = Convert.ToInt32(((double)(idx+1) / (double)numOfTickers) * 100.0);
-                }            
-            });           
+                    this.ProgressPercentage = Convert.ToInt32(((double)(idx + 1) / (double)numOfTickers) * 100.0);
+                    this.ProgressBarMessage = $"updating: {progressPercentage}%";
+                }
+            });
         }
 
         private void displayChart(Asset asset)
@@ -194,7 +240,8 @@ namespace crypto.ViewModels
                 macdChartValues.AddRange(asset.MacdChart.Select(p => (double)p.Macd.GetValueOrDefault(0)));
                 macdSignalChartValues.AddRange(asset.MacdChart.Select(p => (double)p.Signal.GetValueOrDefault(0)));
                 macdHistogramChartValues.AddRange(asset.MacdChart.Select(p => (double)p.Histogram.GetValueOrDefault(0)));
-            } catch (Exception ex)
+            }
+            catch (Exception ex)
             {
                 Debug.WriteLine(ex.Message);
             }
