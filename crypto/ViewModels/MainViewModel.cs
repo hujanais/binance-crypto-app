@@ -32,6 +32,7 @@ namespace crypto.ViewModels
         private DateTime lastUpdated;
         private DateTime nextUpdate;
         private Timer stateTimer;
+        private bool isReady = true;
         private string progressBarMessage = "...";
 
         private Asset selectedAsset;
@@ -123,6 +124,14 @@ namespace crypto.ViewModels
 
         public SeriesCollection SeriesCollection { get; set; }
         public SeriesCollection MacdCollection { get; private set; }
+        public bool IsReady { 
+            get => isReady; 
+            set
+            {
+                isReady = value;
+                this.RaisePropertyChanged(nameof(this.IsReady));
+            }
+        }
 
         #endregion
 
@@ -202,6 +211,7 @@ namespace crypto.ViewModels
             // some cleanup.
             ProgressPercentage = 0;
             int numOfTickers = 0;
+            this.IsReady = false;
 
             var tickers = this.Assets.Select(p => p.Ticker).ToArray();
             numOfTickers = tickers.Count();
@@ -225,7 +235,10 @@ namespace crypto.ViewModels
                     this.ProgressPercentage = Convert.ToInt32(((double)(idx + 1) / (double)numOfTickers) * 100.0);
                     this.ProgressBarMessage = $"updating: {progressPercentage}%";
                 }
+
+                this.IsReady = true;
             });
+
         }
 
         private void displayChart(Asset asset)

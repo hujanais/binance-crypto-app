@@ -38,7 +38,7 @@
         </Grid.RowDefinitions>
 
         <StackPanel Orientation="Horizontal">
-            <Button Command="{Binding EnumeratePairsCommand}"
+            <Button Command="{Binding EnumeratePairsCommand}" IsEnabled="{Binding IsReady}"
                     Content="Enumerate"
                     Margin="5" />
             <TextBlock Text="Tick(hrs) " />
