@@ -16,6 +16,7 @@ namespace crypto.Models
         private IList<EmaResult> ema7;
         private IList<EmaResult> ema25;
         private IList<EmaResult> ema99;
+        private decimal deltaEMA;
         private TrendEnum crossOverSignal;
         private TrendEnum trendSignal;
 
@@ -51,6 +52,16 @@ namespace crypto.Models
             {
                 this.ema99 = value;
                 this.RaisePropertyChanged(nameof(this.EMA99));
+            }
+        }
+
+        public decimal DeltaEMA
+        {
+            get => this.deltaEMA;
+            set
+            {
+                this.deltaEMA = value;
+                this.RaisePropertyChanged(nameof(this.DeltaEMA));
             }
         }
 

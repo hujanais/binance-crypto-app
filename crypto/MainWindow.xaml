@@ -65,12 +65,20 @@
         <ListView Grid.Row="1"
                   ItemsSource="{Binding Assets}"
                   SelectedItem="{Binding SelectedAsset}">
+            <ListView.ItemContainerStyle>
+                <Style TargetType="{x:Type ListViewItem}">
+                    <Setter Property="HorizontalContentAlignment"
+                            Value="Center" />
+                </Style>
+            </ListView.ItemContainerStyle>
             <ListView.View>
                 <GridView>
                     <GridViewColumn Header="Ticker"
                                     DisplayMemberBinding="{Binding Ticker}" />
                     <GridViewColumn Header="Price"
                                     DisplayMemberBinding="{Binding Price}" />
+                    <GridViewColumn Header="dEMA"
+                                    DisplayMemberBinding="{Binding EmaSummary.DeltaEMA}" />
                     <GridViewColumn Header="EMA Trend">
                         <GridViewColumn.CellTemplate>
                             <DataTemplate>

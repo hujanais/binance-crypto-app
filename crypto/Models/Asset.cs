@@ -112,7 +112,7 @@ namespace crypto.Models
             var currentEMA7 = last2EMA7[0];
             var previousEMA7 = last2EMA7[1];
             var currentEMA25 = this.EmaSummary.EMA25.OrderByDescending(p => p.Date).First();
-            (this.EmaSummary.CrossOverSignal, this.EmaSummary.TrendSignal) = this.getEMATrends(previousEMA7, currentEMA7, currentEMA25);
+            (this.EmaSummary.CrossOverSignal, this.EmaSummary.TrendSignal, this.EmaSummary.DeltaEMA) = this.getEMATrends(previousEMA7, currentEMA7, currentEMA25);
 
             // calculate MACD
             this.macdChart = new List<MacdResult>(Indicator.GetMacd(quotes));
@@ -130,12 +130,13 @@ namespace crypto.Models
 
         #endregion
 
-        private (TrendEnum crossSignal, TrendEnum trendSignal) getEMATrends(EmaResult previousEMA7, EmaResult currentEMA7, EmaResult currentEMA25)
+        private (TrendEnum crossSignal, TrendEnum trendSignal, decimal deltaEMA) getEMATrends(EmaResult previousEMA7, EmaResult currentEMA7, EmaResult currentEMA25)
         {
             const double epsilon = 0.02;    // 2 percent
 
             TrendEnum crossSignal = TrendEnum.None;
             TrendEnum trendSignal = TrendEnum.None;
+            decimal deltaEMA = 0;
 
             var deltaValue = Convert.ToDouble((currentEMA7.Ema - previousEMA7.Ema) / Math.Abs(previousEMA7.Ema.Value));
             
@@ -162,8 +163,10 @@ namespace crypto.Models
             {
                 crossSignal = TrendEnum.None;
             }
-            
-            return (crossSignal, trendSignal);
+
+            deltaEMA = currentEMA7.Ema.Value - currentEMA25.Ema.Value;
+
+            return (crossSignal, trendSignal, deltaEMA);
         }
 
         #region Private functions
