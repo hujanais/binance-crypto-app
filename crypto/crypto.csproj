@@ -141,6 +141,8 @@
     <Compile Include="Converters\TrendColorConverter.cs" />
     <Compile Include="Converters\TrendConverter.cs" />
     <Compile Include="Models\Asset.cs" />
+    <Compile Include="Models\Enumerations.cs" />
+    <Compile Include="Models\EMASummary.cs" />
     <Compile Include="Models\MACDSummary.cs" />
     <Compile Include="Models\Trade.cs" />
     <Compile Include="ViewModels\MainViewModel.cs" />

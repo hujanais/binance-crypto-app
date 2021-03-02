@@ -34,7 +34,7 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="auto" />
             <RowDefinition Height="*" />
-            <RowDefinition Height="2*" />
+            <RowDefinition Height="4*" />
         </Grid.RowDefinitions>
 
         <StackPanel Orientation="Horizontal">
@@ -71,6 +71,23 @@
                                     DisplayMemberBinding="{Binding Ticker}" />
                     <GridViewColumn Header="Price"
                                     DisplayMemberBinding="{Binding Price}" />
+                    <GridViewColumn Header="EMA Trend">
+                        <GridViewColumn.CellTemplate>
+                            <DataTemplate>
+                                <materialDesign:PackIcon Foreground="{Binding EmaSummary.TrendSignal, Converter={StaticResource trendColorConverter}}"
+                                                         Kind="{Binding EmaSummary.TrendSignal, Converter={StaticResource trendConverter}}"></materialDesign:PackIcon>
+                            </DataTemplate>
+                        </GridViewColumn.CellTemplate>
+                    </GridViewColumn>
+                    <GridViewColumn Header="EMA CrossOver">
+                        <GridViewColumn.CellTemplate>
+                            <DataTemplate>
+                                <TextBlock Foreground="{Binding EmaSummary.CrossOverSignal, Converter={StaticResource trendColorConverter}}"
+                                           Text="{Binding EmaSummary.CrossOverSignal, Converter={StaticResource signalConverter}}"></TextBlock>
+                            </DataTemplate>
+                        </GridViewColumn.CellTemplate>
+                    </GridViewColumn>
+
                     <GridViewColumn Header="Macd"
                                     DisplayMemberBinding="{Binding MacdSummary.Macd, StringFormat={}{0:0.00}}" />
                     <GridViewColumn Header="Macd Signal"
@@ -98,7 +115,7 @@
         <Grid Grid.Row="2">
             <Grid.RowDefinitions>
                 <RowDefinition Height="auto" />
-                <RowDefinition Height="*" />
+                <RowDefinition Height="2*" />
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
             <StackPanel Orientation="Horizontal"

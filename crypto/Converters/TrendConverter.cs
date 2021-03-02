@@ -16,14 +16,14 @@ namespace crypto.Converters
     {
         public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
         {
-            MACDTrendEnum trend = (MACDTrendEnum)value;
+            TrendEnum trend = (TrendEnum)value;
             switch (trend)
             {
-                case MACDTrendEnum.None:
+                case TrendEnum.None:
                     return "ArrowLeftRight";
-                case MACDTrendEnum.Up:
+                case TrendEnum.Up:
                     return "ArrowTopRight";
-                case MACDTrendEnum.Down:
+                case TrendEnum.Down:
                     return "ArrowBottomRight";
             }
 

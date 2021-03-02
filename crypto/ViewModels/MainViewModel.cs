@@ -39,6 +39,10 @@ namespace crypto.ViewModels
         private double selectedTickTime;
 
         private ChartValues<double> closeChartValues = new ChartValues<double>();
+        private ChartValues<double> ema7ChartValues = new ChartValues<double>();
+        private ChartValues<double> ema25ChartValues = new ChartValues<double>();
+        private ChartValues<double> ema99ChartValues = new ChartValues<double>();
+
         private ChartValues<double> macdChartValues = new ChartValues<double>();
         private ChartValues<double> macdSignalChartValues = new ChartValues<double>();
         private ChartValues<double> macdHistogramChartValues = new ChartValues<double>();
@@ -152,6 +156,9 @@ namespace crypto.ViewModels
             this.MacdCollection = new SeriesCollection();
 
             this.SeriesCollection.Add(new LineSeries() { Values = closeChartValues, ScalesYAt = 0, Fill = Brushes.Transparent, PointGeometrySize = 2 });
+            this.SeriesCollection.Add(new LineSeries() { Values = ema7ChartValues, ScalesYAt = 0, Fill = Brushes.Transparent, PointGeometrySize = 0 });
+            this.SeriesCollection.Add(new LineSeries() { Values = ema25ChartValues, ScalesYAt = 0, Fill = Brushes.Transparent, PointGeometrySize = 0 });
+            this.SeriesCollection.Add(new LineSeries() { Values = ema99ChartValues, ScalesYAt = 0, Fill = Brushes.Transparent, PointGeometrySize = 0 });
 
             this.MacdCollection.Add(new LineSeries() { Values = macdChartValues, ScalesYAt = 0, Fill = Brushes.Transparent, PointGeometrySize = 0 });
             this.MacdCollection.Add(new LineSeries() { Values = macdSignalChartValues, ScalesYAt = 0, Fill = Brushes.Transparent, PointGeometrySize = 0 });
@@ -246,10 +253,17 @@ namespace crypto.ViewModels
             try
             {
                 closeChartValues.Clear();
+                ema7ChartValues.Clear();
+                ema25ChartValues.Clear();
+                ema99ChartValues.Clear();
                 macdChartValues.Clear();
                 macdSignalChartValues.Clear();
                 macdHistogramChartValues.Clear();
                 closeChartValues.AddRange(asset.Candles.Select(p => (double)p.Close));
+                ema7ChartValues.AddRange(asset.EmaSummary.EMA7.Select(p => (double)p.Ema.GetValueOrDefault(0)));
+                ema25ChartValues.AddRange(asset.EmaSummary.EMA25.Select(p => (double)p.Ema.GetValueOrDefault(0)));
+                ema99ChartValues.AddRange(asset.EmaSummary.EMA99.Select(p => (double)p.Ema.GetValueOrDefault(0)));
+
                 macdChartValues.AddRange(asset.MacdChart.Select(p => (double)p.Macd.GetValueOrDefault(0)));
                 macdSignalChartValues.AddRange(asset.MacdChart.Select(p => (double)p.Signal.GetValueOrDefault(0)));
                 macdHistogramChartValues.AddRange(asset.MacdChart.Select(p => (double)p.Histogram.GetValueOrDefault(0)));

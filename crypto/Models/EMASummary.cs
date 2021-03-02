@@ -1,4 +1,5 @@
 ﻿using GalaSoft.MvvmLight;
+using Skender.Stock.Indicators;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -10,48 +11,46 @@ namespace crypto.Models
     /// <summary>
     /// Describes the MACD trading signal summary
     /// </summary>
-    public class MACDSummary : ViewModelBase
+    public class EMASummary : ViewModelBase
     {
-        private decimal macd;
-        private decimal signal;
-        private decimal histogram;
+        private IList<EmaResult> ema7;
+        private IList<EmaResult> ema25;
+        private IList<EmaResult> ema99;
         private TrendEnum crossOverSignal;
         private TrendEnum trendSignal;
 
-        public enum MACDHistogramRegion
+        public EMASummary()
         {
-            None,
-            Negative,
-            Positive,
+            this.ema7 = new List<EmaResult>();
+            this.ema25 = new List<EmaResult>();
+            this.ema99 = new List<EmaResult>();
         }
 
-        public decimal Macd
+        public IList<EmaResult> EMA7
         {
-            get { return this.macd; }
+            get => this.ema7;
             set
             {
-                this.macd = value;
-                this.RaisePropertyChanged(nameof(this.Macd));
+                this.ema7 = value;
+                this.RaisePropertyChanged(nameof(this.EMA7));
             }
         }
-
-        public decimal Signal
+        public IList<EmaResult> EMA25
         {
-            get { return this.signal; }
+            get => this.ema25;
             set
             {
-                this.signal = value;
-                this.RaisePropertyChanged(nameof(this.Signal));
+                this.ema25 = value;
+                this.RaisePropertyChanged(nameof(this.EMA25));
             }
         }
-
-        public decimal Histogram
+        public IList<EmaResult> EMA99
         {
-            get { return this.histogram; }
+            get => this.ema99;
             set
             {
-                this.histogram = value;
-                this.RaisePropertyChanged(nameof(this.Histogram));
+                this.ema99 = value;
+                this.RaisePropertyChanged(nameof(this.EMA99));
             }
         }
 
