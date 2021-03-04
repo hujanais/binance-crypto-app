@@ -24,7 +24,7 @@ namespace crypto.ViewModels
     {
         #region Fields
 
-        const int TENMINUTES_MS = 10 * 60 * 1000;
+        const int ONEHOUR_MS = 60 * 60 * 1000;
         private ExchangeSharp.ExchangeBinanceUSAPI api;
         private IWebSocket socket;
 
@@ -36,6 +36,7 @@ namespace crypto.ViewModels
         private string progressBarMessage = "...";
 
         private Asset selectedAsset;
+        private double selectedAssetTickTime;
         private double selectedTickTime;
 
         private ChartValues<double> closeChartValues = new ChartValues<double>();
@@ -69,6 +70,18 @@ namespace crypto.ViewModels
             {
                 this.selectedTickTime = value;
                 this.RaisePropertyChanged(nameof(this.SelectedTickTime));
+            }
+        }
+
+        public double SelectedAssetTickTime
+        {
+            get => this.selectedAssetTickTime;
+            set
+            {
+                this.selectedAssetTickTime = value;
+                this.RaisePropertyChanged(nameof(this.SelectedAssetTickTime));
+
+                this.doUpdateAssetTickTime();
             }
         }
 
@@ -177,7 +190,9 @@ namespace crypto.ViewModels
             var pairs = (await api.GetTickersAsync()).Where(p => p.Value.MarketSymbol.Contains("USDT") && !p.Value.MarketSymbol.Contains("USDTUSD")).Take(20).ToList();
             pairs.ForEach(pair =>
             {
-                this.Assets.Add(new Asset(pair.Value.MarketSymbol));
+                if (this.Assets.FirstOrDefault(a => a.Ticker == pair.Value.MarketSymbol) == null) {
+                    this.Assets.Add(new Asset(pair.Value.MarketSymbol));
+                }
             });
 
             // Start websocket.
@@ -207,13 +222,13 @@ namespace crypto.ViewModels
                 stateTimer.Dispose();
             }
             stateTimer = new Timer((stateObj) => executeStart(stateObj));
-            stateTimer.Change(500, TENMINUTES_MS);
+            stateTimer.Change(500, ONEHOUR_MS);
         }
 
         private async void executeStart(Object stateInfo)
         {
             this.LastUpdated = DateTime.Now;
-            this.NextUpdate = this.LastUpdated.AddMilliseconds(TENMINUTES_MS);
+            this.NextUpdate = this.LastUpdated.AddMilliseconds(ONEHOUR_MS);
 
             // some cleanup.
             ProgressPercentage = 0;
@@ -229,7 +244,7 @@ namespace crypto.ViewModels
                 {
                     var ticker = tickers[idx];
                     int periodSeconds = Convert.ToInt32(selectedTickTime * 60 * 60);
-                    var candles = await api.GetCandlesAsync(ticker, periodSeconds, null, DateTime.UtcNow, 240);
+                    var candles = await api.GetCandlesAsync(ticker, periodSeconds, null, DateTime.Now, 500);
                     IList<IQuote> quotes = new List<IQuote>();
                     candles.ToList().ForEach(data =>
                     {
@@ -246,6 +261,20 @@ namespace crypto.ViewModels
                 this.IsReady = true;
             });
 
+        }
+
+        private async void doUpdateAssetTickTime()
+        {
+            int periodSeconds = Convert.ToInt32(this.selectedAssetTickTime * 60 * 60);
+            var candles = await api.GetCandlesAsync(this.selectedAsset.Ticker, periodSeconds, null, DateTime.UtcNow, 240);
+            IList<IQuote> quotes = new List<IQuote>();
+            candles.ToList().ForEach(data =>
+            {
+                quotes.Add(new Quote() { Open = data.OpenPrice, Close = data.ClosePrice, Low = data.LowPrice, High = data.HighPrice, Volume = Convert.ToDecimal(data.BaseCurrencyVolume), Date = data.Timestamp });
+            });
+
+            this.selectedAsset.updateQuotes(quotes);
+            this.displayChart(this.selectedAsset);
         }
 
         private void displayChart(Asset asset)

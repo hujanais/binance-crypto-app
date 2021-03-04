@@ -27,5 +27,13 @@ namespace crypto
 
             this.DataContext = new MainViewModel();
         }
+
+        private void Button_Click(object sender, RoutedEventArgs e)
+        {
+            chart1.AxisX[0].MinValue = double.NaN;
+            chart1.AxisY[0].MinValue = double.NaN;
+            chart2.AxisX[0].MinValue = double.NaN;
+            chart2.AxisY[0].MinValue = double.NaN;
+        }
     }
 }

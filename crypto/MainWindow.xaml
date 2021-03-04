@@ -69,6 +69,21 @@
                 <Style TargetType="{x:Type ListViewItem}">
                     <Setter Property="HorizontalContentAlignment"
                             Value="Center" />
+                    <Setter Property="Template">
+                        <Setter.Value>
+                            <ControlTemplate TargetType="{x:Type ListViewItem}">
+                                <Border BorderBrush="Transparent"
+                                        BorderThickness="0"
+                                        Background="{TemplateBinding Background}">
+                                    <GridViewRowPresenter HorizontalAlignment="Stretch"
+                                                          VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                                          Width="Auto"
+                                                          Margin="5"
+                                                          Content="{TemplateBinding Content}" />
+                                </Border>
+                            </ControlTemplate>
+                        </Setter.Value>
+                    </Setter>
                 </Style>
             </ListView.ItemContainerStyle>
             <ListView.View>
@@ -78,7 +93,7 @@
                     <GridViewColumn Header="Price"
                                     DisplayMemberBinding="{Binding Price}" />
                     <GridViewColumn Header="dEMA"
-                                    DisplayMemberBinding="{Binding EmaSummary.DeltaEMA}" />
+                                    DisplayMemberBinding="{Binding EmaSummary.DeltaEMA, StringFormat={}{0:0.00}}" />
                     <GridViewColumn Header="EMA Trend">
                         <GridViewColumn.CellTemplate>
                             <DataTemplate>
@@ -132,32 +147,36 @@
                            Margin="5" />
                 <TextBlock Text="{Binding SelectedAsset.Price}"
                            Margin="5" />
-                <TextBlock Text="{Binding SelectedAsset.MacdSummary.Histogram, StringFormat={}{0:0.00}}"
-                           Margin="5" />
+                <ComboBox ItemsSource="{Binding TickTimes}"
+                          Width="70"
+                          Margin="5"
+                          SelectedItem="{Binding SelectedAssetTickTime}"></ComboBox>
                 <materialDesign:PackIcon VerticalAlignment="Center" 
                                          Kind="{Binding SelectedAsset.MacdSummary.TrendSignal, Converter={StaticResource trendConverter}}"
                                          Foreground="{Binding SelectedAsset.MacdSummary.TrendSignal, Converter={StaticResource trendColorConverter}}"></materialDesign:PackIcon>
+                <Button Content="Reset Zoom"
+                        Margin="5" Click="Button_Click"/>
             </StackPanel>
-            <lvc:CartesianChart Grid.Row="1"
+            <lvc:CartesianChart Grid.Row="1" Name="chart1"
                                 DisableAnimations="True"
                                 Hoverable="False"
                                 DataTooltip="{x:Null}"
                                 Series="{Binding SeriesCollection}">
                 <lvc:CartesianChart.AxisY>
                     <lvc:Axis Foreground="DodgerBlue"
-                              Title="Blue Axis">
+                              Title="Blue Axis" Position="RightTop">
                             <lvc:Axis.Separator>
                             <lvc:Separator Stroke="#cd2a27" />
                             </lvc:Axis.Separator>
                     </lvc:Axis>
                 </lvc:CartesianChart.AxisY>
             </lvc:CartesianChart>
-            <lvc:CartesianChart Grid.Row="2"
+            <lvc:CartesianChart Grid.Row="2" Name="chart2"
                                 Hoverable="False"
                                 DataTooltip="{x:Null}"
                                 Series="{Binding MacdCollection}">
                 <lvc:CartesianChart.AxisY>
-                    <lvc:Axis Foreground="DodgerBlue"
+                    <lvc:Axis Foreground="DodgerBlue" Position="RightTop"
                               Title="Blue Axis">
                         <lvc:Axis.Separator>
                             <lvc:Separator Stroke="#cd2a27" />
