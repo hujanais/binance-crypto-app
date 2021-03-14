@@ -55,6 +55,9 @@ namespace crypto.Models
             }
         }
 
+        /// <summary>
+        ///  Buy signal on MACD histogram turning positive.
+        /// </summary>
         public TrendEnum CrossOverSignal
         {
             get => this.crossOverSignal;
@@ -65,6 +68,9 @@ namespace crypto.Models
             }
         }
 
+        /// <summary>
+        /// General MACD trend
+        /// </summary>
         public TrendEnum TrendSignal
         {
             get => this.trendSignal;

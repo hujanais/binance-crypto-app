@@ -38,6 +38,9 @@
         </Grid.RowDefinitions>
 
         <StackPanel Orientation="Horizontal">
+            <CheckBox IsChecked="{Binding IsLiveTrading}"
+                      Margin="5" Content="LiveTrading"
+                      VerticalAlignment="Center" />
             <Button Command="{Binding EnumeratePairsCommand}" IsEnabled="{Binding IsReady}"
                     Content="Enumerate"
                     Margin="5" />
@@ -131,6 +134,11 @@
                             </DataTemplate>
                         </GridViewColumn.CellTemplate>
                     </GridViewColumn>
+                    <GridViewColumn Header="HasTrade" DisplayMemberBinding="{Binding HasTrade}"></GridViewColumn>
+                    <GridViewColumn Header="BuyPrice"
+                                    DisplayMemberBinding="{Binding BuyPrice}"></GridViewColumn>
+                    <GridViewColumn Header="PL%"
+                                    DisplayMemberBinding="{Binding UnrealizedPLPercentage,StringFormat={}{0:0.00}}"></GridViewColumn>
                 </GridView>
             </ListView.View>
         </ListView>

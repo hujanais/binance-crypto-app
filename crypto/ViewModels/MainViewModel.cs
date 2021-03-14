@@ -1,4 +1,5 @@
 ﻿using crypto.Models;
+using crypto.Utilities;
 using ExchangeSharp;
 using GalaSoft.MvvmLight;
 using GalaSoft.MvvmLight.Command;
@@ -34,12 +35,13 @@ namespace crypto.ViewModels
         private Timer stateTimer;
         private bool isReady = true;
         private string progressBarMessage = "...";
+        private bool isLiveTrading = false;
 
         private Asset selectedAsset;
         private double selectedAssetTickTime;
         private double selectedTickTime;
 
-        private ChartValues<double> closeChartValues = new ChartValues<double>();
+        private ChartValues<OhlcPoint> ohlcChartValues = new ChartValues<OhlcPoint>();
         private ChartValues<double> ema7ChartValues = new ChartValues<double>();
         private ChartValues<double> ema25ChartValues = new ChartValues<double>();
         private ChartValues<double> ema99ChartValues = new ChartValues<double>();
@@ -47,6 +49,8 @@ namespace crypto.ViewModels
         private ChartValues<double> macdChartValues = new ChartValues<double>();
         private ChartValues<double> macdSignalChartValues = new ChartValues<double>();
         private ChartValues<double> macdHistogramChartValues = new ChartValues<double>();
+
+        NLog.Logger logger = NLog.LogManager.GetLogger("crypto-app");
 
         #endregion
 
@@ -73,6 +77,15 @@ namespace crypto.ViewModels
             }
         }
 
+        public bool IsLiveTrading
+        {
+            get => this.isLiveTrading;
+            set
+            {
+                this.isLiveTrading = value;
+                this.RaisePropertyChanged(nameof(this.IsLiveTrading));
+            }
+        }
         public double SelectedAssetTickTime
         {
             get => this.selectedAssetTickTime;
@@ -141,8 +154,9 @@ namespace crypto.ViewModels
 
         public SeriesCollection SeriesCollection { get; set; }
         public SeriesCollection MacdCollection { get; private set; }
-        public bool IsReady { 
-            get => isReady; 
+        public bool IsReady
+        {
+            get => isReady;
             set
             {
                 isReady = value;
@@ -154,6 +168,8 @@ namespace crypto.ViewModels
 
         public MainViewModel()
         {
+            logger.Info($"App started");
+
             // Initialize the api.
             api = new ExchangeSharp.ExchangeBinanceUSAPI();
 
@@ -168,17 +184,17 @@ namespace crypto.ViewModels
             this.SeriesCollection = new SeriesCollection();
             this.MacdCollection = new SeriesCollection();
 
-            this.SeriesCollection.Add(new LineSeries() { Values = closeChartValues, ScalesYAt = 0, Fill = Brushes.Transparent, PointGeometrySize = 2 });
+            this.SeriesCollection.Add(new OhlcSeries() { Values = ohlcChartValues, ScalesYAt = 0, Fill = Brushes.Transparent });
             this.SeriesCollection.Add(new LineSeries() { Values = ema7ChartValues, ScalesYAt = 0, Fill = Brushes.Transparent, PointGeometrySize = 0 });
             this.SeriesCollection.Add(new LineSeries() { Values = ema25ChartValues, ScalesYAt = 0, Fill = Brushes.Transparent, PointGeometrySize = 0 });
             this.SeriesCollection.Add(new LineSeries() { Values = ema99ChartValues, ScalesYAt = 0, Fill = Brushes.Transparent, PointGeometrySize = 0 });
 
             this.MacdCollection.Add(new LineSeries() { Values = macdChartValues, ScalesYAt = 0, Fill = Brushes.Transparent, PointGeometrySize = 0 });
             this.MacdCollection.Add(new LineSeries() { Values = macdSignalChartValues, ScalesYAt = 0, Fill = Brushes.Transparent, PointGeometrySize = 0 });
-            this.MacdCollection.Add(new LineSeries() { Values = macdHistogramChartValues, ScalesYAt = 0, Fill = Brushes.Transparent, PointGeometrySize = 0 });
+            this.MacdCollection.Add(new ColumnSeries() { Values = macdHistogramChartValues, ScalesYAt = 0 });
 
             this.TickTimes = new ObservableCollection<double> { 0.25, 0.5, 1, 2, 4, 8, 12, 24 };
-            this.SelectedTickTime = 12;
+            this.SelectedTickTime = 8;
         }
 
         /// <summary>
@@ -190,7 +206,8 @@ namespace crypto.ViewModels
             var pairs = (await api.GetTickersAsync()).Where(p => p.Value.MarketSymbol.Contains("USDT") && !p.Value.MarketSymbol.Contains("USDTUSD")).Take(20).ToList();
             pairs.ForEach(pair =>
             {
-                if (this.Assets.FirstOrDefault(a => a.Ticker == pair.Value.MarketSymbol) == null) {
+                if (this.Assets.FirstOrDefault(a => a.Ticker == pair.Value.MarketSymbol) == null)
+                {
                     this.Assets.Add(new Asset(pair.Value.MarketSymbol));
                 }
             });
@@ -259,8 +276,102 @@ namespace crypto.ViewModels
                 }
 
                 this.IsReady = true;
-            });
 
+                // update wallet if live trading.
+                double usdtAvail = 0.0;
+                Dictionary<string, decimal> wallet = null;
+                if (isLiveTrading)
+                {
+                    wallet = await api.GetAmountsAvailableToTradeAsync();
+                    if (wallet.ContainsKey("USDT"))
+                    {
+                        usdtAvail = (double)wallet["USDT"];
+                    }
+                }
+
+                // Check for buy signal.
+                var balanceLowWaterMark = 350;
+                var stakeSize = 300;
+                // prevent BTC from being traded.
+                var assetsToBuy = this.Assets.Where(a => !a.Ticker.Contains("BTC") && (a.MacdSummary.CrossOverSignal == TrendEnum.Up && !a.HasTrade && (double)a.Price > 0.1));
+                foreach (var asset in assetsToBuy)
+                {
+                    // get the number of shares to buy.
+                    var shares = RoundShares.GetRoundedShares(stakeSize, asset.Price);
+
+                    if (isLiveTrading)
+                    {
+                        // live trading
+                        if (usdtAvail >= balanceLowWaterMark)
+                        {
+                            // place limit order for 0.01 bitcoin at ticker.Ask USD
+                            var result = await api.PlaceOrderAsync(new ExchangeOrderRequest
+                            {
+                                Amount = shares,
+                                IsBuy = true,
+                                Price = asset.Price,
+                                MarketSymbol = asset.Ticker
+                            });
+                            logger.Info($"BUY: PlaceOrderAsync. {result.MarketSymbol} ${result.Price}.  {result.Result}. {result.OrderId}");
+
+                            // reduce banksize
+                            usdtAvail -= stakeSize;
+
+                            asset.HasTrade = true;
+                            asset.BuyPrice = asset.Price;
+
+                        }
+                        else
+                        {
+                            logger.Info($"{isLiveTrading}. BUY FAILED: out of money. {usdtAvail}");
+                        }
+                    }
+                    else
+                    {
+                        // paper trading.
+                        asset.HasTrade = true;
+                        asset.BuyPrice = asset.Price;
+                        logger.Info($"{isLiveTrading}. BUY: {asset.Ticker}. {shares} @ ${asset.BuyPrice}");
+                    }
+                }
+
+                // check for sell signal.
+                var assetsToSell = this.Assets.Where(a => !a.Ticker.Contains("BTC") && a.HasTrade && a.MacdSummary.CrossOverSignal == TrendEnum.Down);
+                foreach (var asset in assetsToSell)
+                {
+                    if (isLiveTrading)
+                    {
+                        // live trading.
+                        // check to see if we indeed have any coins to sell. 
+                        if (wallet.ContainsKey(asset.Ticker))
+                        {
+                            var amountAvail = wallet[asset.Ticker]; // sell all.
+
+                            var result = await api.PlaceOrderAsync(new ExchangeOrderRequest
+                            {
+                                Amount = amountAvail,
+                                IsBuy = false,
+                                Price = asset.Price,
+                                MarketSymbol = asset.Ticker
+                            });
+
+                            logger.Info($"PlaceOrderAsync. {result.MarketSymbol}, {result.OrderId}, {result.Result}");
+                            logger.Info($"SELL: {asset.Ticker}. ${asset.BuyPrice} - ${asset.Price} - { asset.UnrealizedPLPercentage }% - {amountAvail}");
+                        }
+                        else
+                        {
+                            logger.Info($"SELL ERROR: No position in {asset.Ticker}");
+                        }
+                    }
+                    else
+                    {
+                        // paper trading.
+                        logger.Info($"{isLiveTrading}. SELL: {asset.Ticker}. ${asset.BuyPrice} - ${asset.Price} - { asset.UnrealizedPLPercentage }%");
+                        asset.HasTrade = false;
+                        asset.BuyPrice = 0;
+                    }
+                }
+            });
         }
 
         private async void doUpdateAssetTickTime()
@@ -281,21 +392,21 @@ namespace crypto.ViewModels
         {
             try
             {
-                closeChartValues.Clear();
+                ohlcChartValues.Clear();
                 ema7ChartValues.Clear();
                 ema25ChartValues.Clear();
                 ema99ChartValues.Clear();
                 macdChartValues.Clear();
                 macdSignalChartValues.Clear();
                 macdHistogramChartValues.Clear();
-                closeChartValues.AddRange(asset.Candles.Select(p => (double)p.Close));
-                ema7ChartValues.AddRange(asset.EmaSummary.EMA7.Select(p => (double)p.Ema.GetValueOrDefault(0)));
-                ema25ChartValues.AddRange(asset.EmaSummary.EMA25.Select(p => (double)p.Ema.GetValueOrDefault(0)));
-                ema99ChartValues.AddRange(asset.EmaSummary.EMA99.Select(p => (double)p.Ema.GetValueOrDefault(0)));
+                ohlcChartValues.AddRange(asset.OHLCPoints.Reverse().Take(100).Reverse());
+                ema7ChartValues.AddRange(asset.EmaSummary.EMA7.Select(p => (double)p.Ema.GetValueOrDefault(0)).Reverse().Take(100).Reverse());
+                ema25ChartValues.AddRange(asset.EmaSummary.EMA25.Select(p => (double)p.Ema.GetValueOrDefault(0)).Reverse().Take(100).Reverse());
+                ema99ChartValues.AddRange(asset.EmaSummary.EMA99.Select(p => (double)p.Ema.GetValueOrDefault(0)).Reverse().Take(100).Reverse());
 
-                macdChartValues.AddRange(asset.MacdChart.Select(p => (double)p.Macd.GetValueOrDefault(0)));
-                macdSignalChartValues.AddRange(asset.MacdChart.Select(p => (double)p.Signal.GetValueOrDefault(0)));
-                macdHistogramChartValues.AddRange(asset.MacdChart.Select(p => (double)p.Histogram.GetValueOrDefault(0)));
+                macdChartValues.AddRange(asset.MacdChart.Select(p => (double)p.Macd.GetValueOrDefault(0)).Reverse().Take(100).Reverse());
+                macdSignalChartValues.AddRange(asset.MacdChart.Select(p => (double)p.Signal.GetValueOrDefault(0)).Reverse().Take(100).Reverse());
+                macdHistogramChartValues.AddRange(asset.MacdChart.Select(p => (double)p.Histogram.GetValueOrDefault(0)).Reverse().Take(100).Reverse());
             }
             catch (Exception ex)
             {

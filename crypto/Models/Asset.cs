@@ -1,4 +1,5 @@
 ﻿using GalaSoft.MvvmLight;
+using LiveCharts.Defaults;
 using Skender.Stock.Indicators;
 using System;
 using System.Collections.Generic;
@@ -21,6 +22,8 @@ namespace crypto.Models
         private EMASummary emaSummary;
         private Trade CurrentTrade;
         private IList<Trade> TradeHistory;
+        private bool hasTrade = false;
+        private decimal buyPrice = 0;
 
         public Asset(string ticker)
         {
@@ -28,9 +31,11 @@ namespace crypto.Models
             this.MacdSummary = new MACDSummary();
             this.EmaSummary = new EMASummary();
             this.TradeHistory = new List<Trade>();
+            this.OHLCPoints = new List<OhlcPoint>();
         }
 
         public string Ticker { get; private set; }        
+        
         public decimal Price
         {
             get { return this.price; }
@@ -38,8 +43,43 @@ namespace crypto.Models
             {
                 this.price = value;
                 this.RaisePropertyChanged(nameof(this.Price));
+                this.RaisePropertyChanged(nameof(this.UnrealizedPLPercentage));
             }
         }
+
+        public bool HasTrade
+        {
+            get => this.hasTrade;
+            set
+            {
+                this.hasTrade = value;
+                this.RaisePropertyChanged(nameof(this.HasTrade));
+            }
+        }
+
+        public decimal BuyPrice
+        {
+            get { return this.buyPrice; }
+            set
+            {
+                this.buyPrice = value;
+                this.RaisePropertyChanged(nameof(this.BuyPrice));
+            }
+        }
+
+        public decimal UnrealizedPLPercentage
+        {
+            get
+            {
+                if (this.hasTrade && this.buyPrice > 0)
+                {
+                    return (this.price - this.buyPrice) / this.buyPrice * 100;
+                }
+                return 0;
+            }
+        }
+
+        public IList<OhlcPoint> OHLCPoints { get; private set; }
 
         public IList<IQuote> Candles
         {
@@ -99,6 +139,13 @@ namespace crypto.Models
         public void updateQuotes(IList<IQuote> quotes)
         {
             this.candles = quotes;
+
+            this.OHLCPoints.Clear();
+            // transfer IQuote to OHLCPoint for charting.
+            foreach (var candle in quotes)
+            {
+                this.OHLCPoints.Add(new OhlcPoint((double)candle.Open, (double)candle.High, (double)candle.Low, (double)candle.Close));
+            }
 
             // Get the last price.
             // this.Price = quotes.Last().Close; // Last price is not updated from the websocket.
