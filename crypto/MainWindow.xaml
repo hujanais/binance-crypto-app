@@ -113,7 +113,6 @@
                             </DataTemplate>
                         </GridViewColumn.CellTemplate>
                     </GridViewColumn>
-
                     <GridViewColumn Header="Macd"
                                     DisplayMemberBinding="{Binding MacdSummary.Macd, StringFormat={}{0:0.00}}" />
                     <GridViewColumn Header="Macd Signal"
@@ -139,6 +138,26 @@
                                     DisplayMemberBinding="{Binding BuyPrice}"></GridViewColumn>
                     <GridViewColumn Header="PL%"
                                     DisplayMemberBinding="{Binding UnrealizedPLPercentage,StringFormat={}{0:0.00}}"></GridViewColumn>
+                    <GridViewColumn>
+                        <GridViewColumn.CellTemplate>
+                            <DataTemplate>
+                                <Button Content="Sell"
+                                        Background="DarkRed"
+                                        Command="{Binding RelativeSource={RelativeSource FindAncestor, AncestorType={x:Type Window}}, Path=DataContext.SellCommand}"
+                                        CommandParameter="{Binding}" />
+                            </DataTemplate>
+                        </GridViewColumn.CellTemplate>
+                    </GridViewColumn>
+                    <GridViewColumn>
+                        <GridViewColumn.CellTemplate>
+                            <DataTemplate>
+                                <Button Content="Buy"
+                                        Style="{StaticResource MaterialDesignRaisedAccentButton}"
+                                        Command="{Binding RelativeSource={RelativeSource FindAncestor, AncestorType={x:Type Window}}, Path=DataContext.BuyCommand}"
+                                        CommandParameter="{Binding}" />
+                            </DataTemplate>
+                        </GridViewColumn.CellTemplate>
+                    </GridViewColumn>
                 </GridView>
             </ListView.View>
         </ListView>

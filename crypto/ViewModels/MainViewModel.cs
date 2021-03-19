@@ -25,7 +25,7 @@ namespace crypto.ViewModels
     {
         #region Fields
 
-        const int ONEHOUR_MS = 60 * 60 * 1000;
+        const int ONEHOUR_MS = 1 * 60 * 1000;
         private ExchangeSharp.ExchangeBinanceUSAPI api;
         private IWebSocket socket;
 
@@ -57,7 +57,8 @@ namespace crypto.ViewModels
         #region ICommands
 
         public ICommand EnumeratePairsCommand { get; private set; }
-
+        public ICommand BuyCommand { get; private set; }
+        public ICommand SellCommand { get; private set; }
         #endregion
 
         #region Properties
@@ -178,6 +179,8 @@ namespace crypto.ViewModels
 
             // ICommand binding
             this.EnumeratePairsCommand = new RelayCommand(this.executeEnumerate);
+            this.BuyCommand = new RelayCommand<Asset>(this.doBuy);
+            this.SellCommand = new RelayCommand<Asset>(this.doSell);
 
             // Pre-allocate memory
             this.Assets = new ObservableCollection<Asset>();
@@ -197,13 +200,71 @@ namespace crypto.ViewModels
             this.SelectedTickTime = 8;
         }
 
+        private async void doSell(Asset asset)
+        {
+            Dictionary<string, decimal> wallet = null;
+            wallet = await api.GetAmountsAvailableToTradeAsync();
+            var currency = asset.Ticker.Replace("USDT", string.Empty);
+            if (wallet.ContainsKey(currency))
+            {
+                var amountAvail = wallet[currency]; // sell all.
+                try
+                {
+                    var result = await api.PlaceOrderAsync(new ExchangeOrderRequest
+                    {
+                        Amount = amountAvail,
+                        IsBuy = false,
+                        Price = asset.Bid,
+                        MarketSymbol = asset.Ticker
+                    });
+
+                    asset.HasTrade = false;
+                    asset.BuyPrice = 0;
+                    logger.Info($"PlaceOrderAsync-Sell. {result.MarketSymbol}, {result.OrderId}, {result.Result}");
+                }
+                catch (Exception ex)
+                {
+                    logger.Info($"PlaceOrderAsync-Sell. {ex.Message}");
+                }
+            }
+        }
+
+        private async void doBuy(Asset asset)
+        {
+            ExchangeMarket market = await api.GetExchangeMarketFromCacheAsync(asset.Ticker);
+
+            Dictionary<string, decimal> wallet = null;
+            wallet = await api.GetAmountsAvailableToTradeAsync();
+
+            // get the number of shares to buy.
+            var shares = RoundShares.GetRoundedShares(12, asset.Price);
+
+            try
+            {
+                // place limit order for 0.01 bitcoin at ticker.Ask USD
+                var order = new ExchangeOrderRequest
+                {
+                    Amount = shares,
+                    IsBuy = true,
+                    Price = asset.Price,
+                    MarketSymbol = asset.Ticker
+                };
+                var result = await api.PlaceOrderAsync(order);
+                logger.Info($"PlaceOrderAsync-Buy. {result.MarketSymbol} ${result.Price}.  {result.Result}. {result.OrderId}");
+            }
+            catch (Exception ex)
+            {
+                logger.Info($"PlaceOrderAsync-Buy. {ex.Message}");
+            }
+        }
+
         /// <summary>
         /// You can call this method multiple times with no issues.
         /// </summary>
         private async void executeEnumerate()
         {
             // Get a list of markets.
-            var pairs = (await api.GetTickersAsync()).Where(p => p.Value.MarketSymbol.Contains("USDT") && !p.Value.MarketSymbol.Contains("USDTUSD")).Take(20).ToList();
+            var pairs = (await api.GetTickersAsync()).Where(p => p.Value.MarketSymbol.Contains("BATUSDT") && !p.Value.MarketSymbol.Contains("USDTUSD")).Take(30).ToList();
             pairs.ForEach(pair =>
             {
                 if (this.Assets.FirstOrDefault(a => a.Ticker == pair.Value.MarketSymbol) == null)
@@ -227,8 +288,9 @@ namespace crypto.ViewModels
                         if (foundTkr.Value != null)
                         {
                             this.Assets[i].Price = foundTkr.Value.Last;
+                            this.Assets[i].Ask = foundTkr.Value.Ask;
+                            this.Assets[i].Bid = foundTkr.Value.Bid;
                         }
-
                     }
                 }, tickers);
             }
@@ -293,7 +355,7 @@ namespace crypto.ViewModels
                 var balanceLowWaterMark = 350;
                 var stakeSize = 300;
                 // prevent BTC from being traded.
-                var assetsToBuy = this.Assets.Where(a => !a.Ticker.Contains("BTC") && (a.MacdSummary.CrossOverSignal == TrendEnum.Up && !a.HasTrade && (double)a.Price > 0.1));
+                var assetsToBuy = this.Assets.Where(a => !a.Ticker.Contains("BTC") && (a.MacdSummary.CrossOverSignal == TrendEnum.Up && !a.HasTrade && (double)a.Price > 0));
                 foreach (var asset in assetsToBuy)
                 {
                     // get the number of shares to buy.
@@ -304,22 +366,28 @@ namespace crypto.ViewModels
                         // live trading
                         if (usdtAvail >= balanceLowWaterMark)
                         {
-                            // place limit order for 0.01 bitcoin at ticker.Ask USD
-                            var result = await api.PlaceOrderAsync(new ExchangeOrderRequest
+                            try
                             {
-                                Amount = shares,
-                                IsBuy = true,
-                                Price = asset.Price,
-                                MarketSymbol = asset.Ticker
-                            });
-                            logger.Info($"BUY: PlaceOrderAsync. {result.MarketSymbol} ${result.Price}.  {result.Result}. {result.OrderId}");
+                                var order = new ExchangeOrderRequest
+                                {
+                                    Amount = shares,
+                                    IsBuy = true,
+                                    Price = asset.Ask,
+                                    MarketSymbol = asset.Ticker
+                                };
+                                var result = await api.PlaceOrderAsync(order);
+                                logger.Info($"BUY: PlaceOrderAsync. {result.MarketSymbol} ${result.Price}.  {result.Result}. {result.OrderId}");
 
-                            // reduce banksize
-                            usdtAvail -= stakeSize;
+                                // reduce banksize
+                                usdtAvail -= stakeSize;
 
-                            asset.HasTrade = true;
-                            asset.BuyPrice = asset.Price;
-
+                                asset.HasTrade = true;
+                                asset.BuyPrice = asset.Price;
+                            }
+                            catch (Exception ex)
+                            {
+                                logger.Info($"PlaceOrderAsync-Buy. {ex.Message}");
+                            }
                         }
                         else
                         {
@@ -335,28 +403,38 @@ namespace crypto.ViewModels
                     }
                 }
 
-                // check for sell signal.
-                var assetsToSell = this.Assets.Where(a => !a.Ticker.Contains("BTC") && a.HasTrade && a.MacdSummary.CrossOverSignal == TrendEnum.Down);
+                // check for sell signal.  sell once the macd trend signal changes to flat.
+                var assetsToSell = this.Assets.Where(a => !a.Ticker.Contains("BTC") && a.HasTrade && a.MacdSummary.TrendSignal == TrendEnum.None);
                 foreach (var asset in assetsToSell)
                 {
                     if (isLiveTrading)
                     {
                         // live trading.
-                        // check to see if we indeed have any coins to sell. 
-                        if (wallet.ContainsKey(asset.Ticker))
+                        // check to see if we indeed have any coins to sell.
+                        var currency = asset.Ticker.Replace("USDT", string.Empty);
+                        if (wallet.ContainsKey(currency))
                         {
-                            var amountAvail = wallet[asset.Ticker]; // sell all.
+                            // the wallet key has the USDT stripped out. so that BATUSDT = BAT.
+                            var amountAvail = wallet[currency]; // sell all.
 
-                            var result = await api.PlaceOrderAsync(new ExchangeOrderRequest
+                            try
                             {
-                                Amount = amountAvail,
-                                IsBuy = false,
-                                Price = asset.Price,
-                                MarketSymbol = asset.Ticker
-                            });
+                                var result = await api.PlaceOrderAsync(new ExchangeOrderRequest
+                                {
+                                    Amount = amountAvail,
+                                    IsBuy = false,
+                                    Price = asset.Bid,
+                                    MarketSymbol = asset.Ticker
+                                });
 
-                            logger.Info($"PlaceOrderAsync. {result.MarketSymbol}, {result.OrderId}, {result.Result}");
-                            logger.Info($"SELL: {asset.Ticker}. ${asset.BuyPrice} - ${asset.Price} - { asset.UnrealizedPLPercentage }% - {amountAvail}");
+                                logger.Info($"PlaceOrderAsync-Sell. {result.MarketSymbol}, {result.OrderId}, {result.Result}");
+                                asset.HasTrade = false;
+                                asset.BuyPrice = 0;
+                            }
+                            catch (Exception ex)
+                            {
+                                logger.Info($"PlaceOrderAsync-Sell. {ex.Message}");
+                            }
                         }
                         else
                         {

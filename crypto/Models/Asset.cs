@@ -18,6 +18,8 @@ namespace crypto.Models
         private IList<MacdResult> macdChart;
 
         private decimal price;
+        private decimal ask;
+        private decimal bid;
         private MACDSummary macdSummary;
         private EMASummary emaSummary;
         private Trade CurrentTrade;
@@ -46,6 +48,27 @@ namespace crypto.Models
                 this.RaisePropertyChanged(nameof(this.UnrealizedPLPercentage));
             }
         }
+
+        public decimal Ask
+        {
+            get => this.ask;
+            set
+            {
+                this.ask = value;
+                this.RaisePropertyChanged(nameof(this.Ask));
+            }
+        }
+
+        public decimal Bid
+        {
+            get => this.bid;
+            set
+            {
+                this.bid = value;
+                this.RaisePropertyChanged(nameof(this.Bid));
+            }
+        }
+
 
         public bool HasTrade
         {
