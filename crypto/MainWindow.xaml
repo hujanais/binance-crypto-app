@@ -46,7 +46,7 @@
                     Margin="5" />
             <TextBlock Text="Tick(hrs) " />
             <ComboBox ItemsSource="{Binding TickTimes}" Width="70" Margin="5"
-                      SelectedItem="{Binding SelectedTickTime}"></ComboBox>
+                      SelectedItem="{Binding SelectedTickTime}" IsReadOnly="True"></ComboBox>
             <Grid>
                 <ProgressBar Style="{DynamicResource MaterialDesignLinearProgressBar }"
                              Minimum="0"
@@ -138,6 +138,8 @@
                                     DisplayMemberBinding="{Binding BuyPrice}"></GridViewColumn>
                     <GridViewColumn Header="PL%"
                                     DisplayMemberBinding="{Binding UnrealizedPLPercentage,StringFormat={}{0:0.00}}"></GridViewColumn>
+                    <GridViewColumn Header="Wallet"
+                                    DisplayMemberBinding="{Binding Amount,StringFormat={}{0:0.00}}"></GridViewColumn>
                     <GridViewColumn>
                         <GridViewColumn.CellTemplate>
                             <DataTemplate>
@@ -151,9 +153,9 @@
                     <GridViewColumn>
                         <GridViewColumn.CellTemplate>
                             <DataTemplate>
-                                <Button Content="Buy"
+                                <Button Content="Reset"
                                         Style="{StaticResource MaterialDesignRaisedAccentButton}"
-                                        Command="{Binding RelativeSource={RelativeSource FindAncestor, AncestorType={x:Type Window}}, Path=DataContext.BuyCommand}"
+                                        Command="{Binding RelativeSource={RelativeSource FindAncestor, AncestorType={x:Type Window}}, Path=DataContext.ResetCommand}"
                                         CommandParameter="{Binding}" />
                             </DataTemplate>
                         </GridViewColumn.CellTemplate>

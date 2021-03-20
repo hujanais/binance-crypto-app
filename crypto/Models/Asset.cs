@@ -26,7 +26,7 @@ namespace crypto.Models
         private IList<Trade> TradeHistory;
         private bool hasTrade = false;
         private decimal buyPrice = 0;
-
+        private decimal amount = 0;
         public Asset(string ticker)
         {
             this.Ticker = ticker;
@@ -38,6 +38,25 @@ namespace crypto.Models
 
         public string Ticker { get; private set; }        
         
+        /// <summary>
+        /// Get the base currency. if ticker is BATUSDT, the base currency is BAT.
+        /// Use this for the wallet.
+        /// </summary>
+        public string BaseCurrency
+        {
+            get => this.Ticker.Replace("USDT", string.Empty);
+        }
+
+        public decimal Amount
+        {
+            get => this.amount;
+            set
+            {
+                this.amount = value;
+                this.RaisePropertyChanged(nameof(this.Amount));
+            }
+        }
+
         public decimal Price
         {
             get { return this.price; }

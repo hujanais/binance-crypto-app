@@ -25,7 +25,7 @@ namespace crypto.ViewModels
     {
         #region Fields
 
-        const int ONEHOUR_MS = 1 * 60 * 1000;
+        const int ONEHOUR_MS = 60 * 60 * 1000;
         private ExchangeSharp.ExchangeBinanceUSAPI api;
         private IWebSocket socket;
 
@@ -57,7 +57,7 @@ namespace crypto.ViewModels
         #region ICommands
 
         public ICommand EnumeratePairsCommand { get; private set; }
-        public ICommand BuyCommand { get; private set; }
+        public ICommand ResetCommand { get; private set; }
         public ICommand SellCommand { get; private set; }
         #endregion
 
@@ -179,7 +179,7 @@ namespace crypto.ViewModels
 
             // ICommand binding
             this.EnumeratePairsCommand = new RelayCommand(this.executeEnumerate);
-            this.BuyCommand = new RelayCommand<Asset>(this.doBuy);
+            this.ResetCommand = new RelayCommand<Asset>(this.doReset);
             this.SellCommand = new RelayCommand<Asset>(this.doSell);
 
             // Pre-allocate memory
@@ -229,34 +229,44 @@ namespace crypto.ViewModels
             }
         }
 
-        private async void doBuy(Asset asset)
+        /// <summary>
+        /// sometimes the user sells the coin from somewhere else so this is to reset the coin.
+        /// </summary>
+        /// <param name="asset"></param>
+        private void doReset(Asset asset)
         {
-            ExchangeMarket market = await api.GetExchangeMarketFromCacheAsync(asset.Ticker);
-
-            Dictionary<string, decimal> wallet = null;
-            wallet = await api.GetAmountsAvailableToTradeAsync();
-
-            // get the number of shares to buy.
-            var shares = RoundShares.GetRoundedShares(12, asset.Price);
-
-            try
-            {
-                // place limit order for 0.01 bitcoin at ticker.Ask USD
-                var order = new ExchangeOrderRequest
-                {
-                    Amount = shares,
-                    IsBuy = true,
-                    Price = asset.Price,
-                    MarketSymbol = asset.Ticker
-                };
-                var result = await api.PlaceOrderAsync(order);
-                logger.Info($"PlaceOrderAsync-Buy. {result.MarketSymbol} ${result.Price}.  {result.Result}. {result.OrderId}");
-            }
-            catch (Exception ex)
-            {
-                logger.Info($"PlaceOrderAsync-Buy. {ex.Message}");
-            }
+            asset.HasTrade = false;
+            asset.BuyPrice = 0m;
         }
+
+        //private async void doBuy(Asset asset)
+        //{
+        //    ExchangeMarket market = await api.GetExchangeMarketFromCacheAsync(asset.Ticker);
+
+        //    Dictionary<string, decimal> wallet = null;
+        //    wallet = await api.GetAmountsAvailableToTradeAsync();
+
+        //    // get the number of shares to buy.
+        //    var shares = RoundShares.GetRoundedShares(12, asset.Price);
+
+        //    try
+        //    {
+        //        // place limit order for 0.01 bitcoin at ticker.Ask USD
+        //        var order = new ExchangeOrderRequest
+        //        {
+        //            Amount = shares,
+        //            IsBuy = true,
+        //            Price = asset.Price,
+        //            MarketSymbol = asset.Ticker
+        //        };
+        //        var result = await api.PlaceOrderAsync(order);
+        //        logger.Info($"PlaceOrderAsync-Buy. {result.MarketSymbol} ${result.Price}.  {result.Result}. {result.OrderId}");
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        logger.Info($"PlaceOrderAsync-Buy. {ex.Message}");
+        //    }
+        //}
 
         /// <summary>
         /// You can call this method multiple times with no issues.
@@ -264,7 +274,13 @@ namespace crypto.ViewModels
         private async void executeEnumerate()
         {
             // Get a list of markets.
-            var pairs = (await api.GetTickersAsync()).Where(p => p.Value.MarketSymbol.Contains("BATUSDT") && !p.Value.MarketSymbol.Contains("USDTUSD")).Take(30).ToList();
+            // remove all cryptos with 0 bid. dead coins.
+            // remove all cryptos with volume less than 150K USD.
+            // BTC is included but never traded.  it is left as a reference.
+            var pairs = (await api.GetTickersAsync()).Where(p => p.Value.MarketSymbol.Contains("USDT") && 
+            p.Value.Bid > 0 && p.Value.Volume.QuoteCurrencyVolume > 150000m &&
+            !p.Value.MarketSymbol.Contains("USDTUSD")).ToList();
+
             pairs.ForEach(pair =>
             {
                 if (this.Assets.FirstOrDefault(a => a.Ticker == pair.Value.MarketSymbol) == null)
@@ -272,6 +288,12 @@ namespace crypto.ViewModels
                     this.Assets.Add(new Asset(pair.Value.MarketSymbol));
                 }
             });
+
+            for (int i = 0; i < this.Assets.Count; i++)
+            {
+                var asset = this.Assets[i];
+                var ccc = await api.GetExchangeMarketFromCacheAsync(asset.Ticker);
+            }
 
             // Start websocket.
             // the web socket will handle disconnects and attempt to re-connect automatically.
@@ -292,19 +314,32 @@ namespace crypto.ViewModels
                             this.Assets[i].Bid = foundTkr.Value.Bid;
                         }
                     }
-                }, tickers);
+                });
             }
+
+            // Run this once to hydrate the screen. 
+            await executeStart(null);
+
+            // Now we want to run the timer on the hour XX:01 time.
+            var currentTime = DateTime.Now;
+            var minutesAway = 60 - currentTime.Minute + 1;
 
             // start the timer event.
             if (stateTimer != null)
             {
                 stateTimer.Dispose();
             }
-            stateTimer = new Timer((stateObj) => executeStart(stateObj));
-            stateTimer.Change(500, ONEHOUR_MS);
+
+            stateTimer = new Timer(async(objState) => await executeStart(objState));
+            stateTimer.Change(minutesAway * 60 * 1000, ONEHOUR_MS);
         }
 
-        private async void executeStart(Object stateInfo)
+        /// <summary>
+        /// This gets run by the timer once per hour but trading only occurs at 
+        /// 12AM, 8AM and 4PM based on the 8 hour candle.
+        /// </summary>
+        /// <returns></returns>
+        private async Task executeStart(object objState)
         {
             this.LastUpdated = DateTime.Now;
             this.NextUpdate = this.LastUpdated.AddMilliseconds(ONEHOUR_MS);
@@ -317,43 +352,52 @@ namespace crypto.ViewModels
             var tickers = this.Assets.Select(p => p.Ticker).ToArray();
             numOfTickers = tickers.Count();
 
-            await Task.Factory.StartNew(async () =>
+            // update wallet if live trading.
+            double usdtAvail = 0.0;
+            Dictionary<string, decimal> wallet = new Dictionary<string, decimal>();
+            if (isLiveTrading)
             {
-                for (int idx = 0; idx < numOfTickers; idx++)
+                wallet = await api.GetAmountsAvailableToTradeAsync();
+                if (wallet.ContainsKey("USDT"))
                 {
-                    var ticker = tickers[idx];
-                    int periodSeconds = Convert.ToInt32(selectedTickTime * 60 * 60);
-                    var candles = await api.GetCandlesAsync(ticker, periodSeconds, null, DateTime.Now, 500);
-                    IList<IQuote> quotes = new List<IQuote>();
-                    candles.ToList().ForEach(data =>
-                    {
-                        quotes.Add(new Quote() { Open = data.OpenPrice, Close = data.ClosePrice, Low = data.LowPrice, High = data.HighPrice, Volume = Convert.ToDecimal(data.BaseCurrencyVolume), Date = data.Timestamp });
-                    });
+                    usdtAvail = (double)wallet["USDT"];
+                }
+            }
 
-                    var asset = this.Assets.First(a => a.Ticker == ticker);
-                    asset.updateQuotes(quotes);
+            // Get the data.
+            for (int idx = 0; idx < numOfTickers; idx++)
+            {
+                var ticker = tickers[idx];
+                int periodSeconds = Convert.ToInt32(selectedTickTime * 60 * 60); // TODO: selectedTickTime locked to 8 hours for now.
+                var candles = await api.GetCandlesAsync(ticker, periodSeconds, null, DateTime.Now, 250);
+                IList<IQuote> quotes = new List<IQuote>();
+                candles.ToList().ForEach(data =>
+                {
+                    quotes.Add(new Quote() { Open = data.OpenPrice, Close = data.ClosePrice, Low = data.LowPrice, High = data.HighPrice, Volume = Convert.ToDecimal(data.BaseCurrencyVolume), Date = data.Timestamp });
+                });
 
-                    this.ProgressPercentage = Convert.ToInt32(((double)(idx + 1) / (double)numOfTickers) * 100.0);
-                    this.ProgressBarMessage = $"updating: {progressPercentage}%";
+                var asset = this.Assets.First(a => a.Ticker == ticker);
+                asset.updateQuotes(quotes);
+
+                // update the wallet size.
+                if (wallet.ContainsKey(asset.BaseCurrency))
+                {
+                    asset.Amount = wallet[asset.BaseCurrency];
                 }
 
-                this.IsReady = true;
+                this.ProgressPercentage = Convert.ToInt32(((double)(idx + 1) / (double)numOfTickers) * 100.0);
+                this.ProgressBarMessage = $"updating: {progressPercentage}%";
+            }
 
-                // update wallet if live trading.
-                double usdtAvail = 0.0;
-                Dictionary<string, decimal> wallet = null;
-                if (isLiveTrading)
-                {
-                    wallet = await api.GetAmountsAvailableToTradeAsync();
-                    if (wallet.ContainsKey("USDT"))
-                    {
-                        usdtAvail = (double)wallet["USDT"];
-                    }
-                }
+            this.IsReady = true;
 
+            // Buying can occur only when the time is a 12AM, 8AM and 4PM UTC.
+            var currentUTC = DateTime.UtcNow;
+            if (currentUTC.Hour == 0 || currentUTC.Hour == 8 || currentUTC.Hour == 16)
+            {
                 // Check for buy signal.
-                var balanceLowWaterMark = 350;
-                var stakeSize = 300;
+                var balanceLowWaterMark = 200;
+                var stakeSize = 100;
                 // prevent BTC from being traded.
                 var assetsToBuy = this.Assets.Where(a => !a.Ticker.Contains("BTC") && (a.MacdSummary.CrossOverSignal == TrendEnum.Up && !a.HasTrade && (double)a.Price > 0));
                 foreach (var asset in assetsToBuy)
@@ -402,54 +446,55 @@ namespace crypto.ViewModels
                         logger.Info($"{isLiveTrading}. BUY: {asset.Ticker}. {shares} @ ${asset.BuyPrice}");
                     }
                 }
+            }
 
-                // check for sell signal.  sell once the macd trend signal changes to flat.
-                var assetsToSell = this.Assets.Where(a => !a.Ticker.Contains("BTC") && a.HasTrade && a.MacdSummary.TrendSignal == TrendEnum.None);
-                foreach (var asset in assetsToSell)
+            // TODO: need to update sell condition to be more aggresive.
+            // check for sell signal.  sell once the macd trend signal changes to flat.
+            var assetsToSell = this.Assets.Where(a => !a.Ticker.Contains("BTC") && a.HasTrade && a.MacdSummary.TrendSignal == TrendEnum.None);
+            foreach (var asset in assetsToSell)
+            {
+                if (isLiveTrading)
                 {
-                    if (isLiveTrading)
+                    // live trading.
+                    // check to see if we indeed have any coins to sell.
+                    var currency = asset.BaseCurrency;
+                    if (wallet.ContainsKey(currency))
                     {
-                        // live trading.
-                        // check to see if we indeed have any coins to sell.
-                        var currency = asset.Ticker.Replace("USDT", string.Empty);
-                        if (wallet.ContainsKey(currency))
+                        // the wallet key has the USDT stripped out. so that BATUSDT = BAT.
+                        var amountAvail = wallet[currency]; // sell all.
+
+                        try
                         {
-                            // the wallet key has the USDT stripped out. so that BATUSDT = BAT.
-                            var amountAvail = wallet[currency]; // sell all.
-
-                            try
+                            var result = await api.PlaceOrderAsync(new ExchangeOrderRequest
                             {
-                                var result = await api.PlaceOrderAsync(new ExchangeOrderRequest
-                                {
-                                    Amount = amountAvail,
-                                    IsBuy = false,
-                                    Price = asset.Bid,
-                                    MarketSymbol = asset.Ticker
-                                });
+                                Amount = amountAvail,
+                                IsBuy = false,
+                                Price = asset.Bid,
+                                MarketSymbol = asset.Ticker
+                            });
 
-                                logger.Info($"PlaceOrderAsync-Sell. {result.MarketSymbol}, {result.OrderId}, {result.Result}");
-                                asset.HasTrade = false;
-                                asset.BuyPrice = 0;
-                            }
-                            catch (Exception ex)
-                            {
-                                logger.Info($"PlaceOrderAsync-Sell. {ex.Message}");
-                            }
+                            logger.Info($"PlaceOrderAsync-Sell. {result.MarketSymbol}, {result.OrderId}, {result.Result}");
+                            asset.HasTrade = false;
+                            asset.BuyPrice = 0;
                         }
-                        else
+                        catch (Exception ex)
                         {
-                            logger.Info($"SELL ERROR: No position in {asset.Ticker}");
+                            logger.Info($"PlaceOrderAsync-Sell. {ex.Message}");
                         }
                     }
                     else
                     {
-                        // paper trading.
-                        logger.Info($"{isLiveTrading}. SELL: {asset.Ticker}. ${asset.BuyPrice} - ${asset.Price} - { asset.UnrealizedPLPercentage }%");
-                        asset.HasTrade = false;
-                        asset.BuyPrice = 0;
+                        logger.Info($"SELL ERROR: No position in {asset.Ticker}");
                     }
                 }
-            });
+                else
+                {
+                    // paper trading.
+                    logger.Info($"{isLiveTrading}. SELL: {asset.Ticker}. ${asset.BuyPrice} - ${asset.Price} - { asset.UnrealizedPLPercentage }%");
+                    asset.HasTrade = false;
+                    asset.BuyPrice = 0;
+                }
+            }
         }
 
         private async void doUpdateAssetTickTime()
