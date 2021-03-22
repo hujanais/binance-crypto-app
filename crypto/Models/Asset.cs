@@ -14,7 +14,6 @@ namespace crypto.Models
     /// </summary>
     public class Asset : ViewModelBase
     {
-        private IList<IQuote> candles;
         private IList<MacdResult> macdChart;
 
         private decimal price;
@@ -44,7 +43,7 @@ namespace crypto.Models
         /// </summary>
         public string BaseCurrency
         {
-            get => this.Ticker.Replace("USDT", string.Empty);
+            get => this.Ticker.Replace("USD", string.Empty);
         }
 
         public decimal Amount
@@ -123,11 +122,6 @@ namespace crypto.Models
 
         public IList<OhlcPoint> OHLCPoints { get; private set; }
 
-        public IList<IQuote> Candles
-        {
-            get => this.candles;
-        }
-
         public IList<MacdResult> MacdChart
         {
             get => this.macdChart;
@@ -178,13 +172,15 @@ namespace crypto.Models
             get => CurrentTrade != null && CurrentTrade.BuySide.HasPosition && !CurrentTrade.SellSide.HasPosition;
         }
 
-        public void updateQuotes(IList<IQuote> quotes)
+        /// <summary>
+        /// Past in the historical data.
+        /// </summary>
+        /// <param name="quotes">the 2-hour candle data</param>
+        public void updateQuotes(IList<IQuote> quotesFast, IList<IQuote> quotesSlow)
         {
-            this.candles = quotes;
-
             this.OHLCPoints.Clear();
             // transfer IQuote to OHLCPoint for charting.
-            foreach (var candle in quotes)
+            foreach (var candle in quotesSlow)
             {
                 this.OHLCPoints.Add(new OhlcPoint((double)candle.Open, (double)candle.High, (double)candle.Low, (double)candle.Close));
             }
@@ -192,10 +188,10 @@ namespace crypto.Models
             // Get the last price.
             // this.Price = quotes.Last().Close; // Last price is not updated from the websocket.
 
-            // calculate EMA
-            this.EmaSummary.EMA7 = new List<EmaResult>(Indicator.GetEma(quotes, 7));
-            this.EmaSummary.EMA25 = new List<EmaResult>(Indicator.GetEma(quotes, 25));
-            this.EmaSummary.EMA99 = new List<EmaResult>(Indicator.GetEma(quotes, 99));
+            // calculate Slow EMA
+            this.EmaSummary.EMA7 = new List<EmaResult>(Indicator.GetEma(quotesSlow, 7));
+            this.EmaSummary.EMA25 = new List<EmaResult>(Indicator.GetEma(quotesSlow, 25));
+            this.EmaSummary.EMA99 = new List<EmaResult>(Indicator.GetEma(quotesSlow, 99));
             // Get the last 2 values of the macd.
             var last2EMA7 = this.EmaSummary.EMA7.OrderByDescending(p => p.Date).Take(2).ToArray();
             var currentEMA7 = last2EMA7[0];
@@ -203,10 +199,10 @@ namespace crypto.Models
             var currentEMA25 = this.EmaSummary.EMA25.OrderByDescending(p => p.Date).First();
             (this.EmaSummary.CrossOverSignal, this.EmaSummary.TrendSignal, this.EmaSummary.DeltaEMA) = this.getEMATrends(previousEMA7, currentEMA7, currentEMA25);
 
-            // calculate MACD
-            this.macdChart = new List<MacdResult>(Indicator.GetMacd(quotes));
+            // calculate Slow MACD
+            this.macdChart = new List<MacdResult>(Indicator.GetMacd(quotesSlow));
 
-            // Get the last 2 values of the macd.
+            // Get the last 2 values of the slow macd.
             var last2 = this.macdChart.OrderByDescending(p => p.Date).Take(2).ToArray();
             var currentMACD = last2[0];
             var previousMACD = last2[1];
@@ -215,6 +211,13 @@ namespace crypto.Models
             this.MacdSummary.Signal = currentMACD.Signal.Value;
             this.MacdSummary.Histogram = currentMACD.Histogram.Value;
             (this.MacdSummary.CrossOverSignal, this.MacdSummary.TrendSignal) = this.getMACDTrends(previousMACD, currentMACD);
+
+            // Calculate the Fast MACD
+            var fastMACD = new List<MacdResult>(Indicator.GetMacd(quotesFast));
+            var last2Fast = fastMACD.OrderByDescending(p => p.Date).Take(2).ToArray();
+            var currentFastMACD = last2Fast[0];
+            var previousFastMACD = last2Fast[1];
+            (this.MacdSummary.CrossOverSignalFast, this.MacdSummary.TrendSignalFast) = this.getMACDTrends(previousFastMACD, currentFastMACD);
         }
 
         #endregion

@@ -18,6 +18,9 @@ namespace crypto.Models
         private TrendEnum crossOverSignal;
         private TrendEnum trendSignal;
 
+        private TrendEnum crossOverSignalFast;
+        private TrendEnum trendSignalFast;
+
         public enum MACDHistogramRegion
         {
             None,
@@ -69,7 +72,7 @@ namespace crypto.Models
         }
 
         /// <summary>
-        /// General MACD trend
+        /// General MACD Fast trend
         /// </summary>
         public TrendEnum TrendSignal
         {
@@ -78,6 +81,29 @@ namespace crypto.Models
             {
                 this.trendSignal = value;
                 this.RaisePropertyChanged(nameof(this.TrendSignal));
+            }
+        }
+
+        public TrendEnum CrossOverSignalFast
+        {
+            get => this.crossOverSignalFast;
+            set
+            {
+                this.crossOverSignalFast = value;
+                this.RaisePropertyChanged(nameof(this.CrossOverSignalFast));
+            }
+        }
+
+        /// <summary>
+        /// General MACD Fast trend
+        /// </summary>
+        public TrendEnum TrendSignalFast
+        {
+            get => this.trendSignalFast;
+            set
+            {
+                this.trendSignalFast = value;
+                this.RaisePropertyChanged(nameof(this.TrendSignalFast));
             }
         }
     }

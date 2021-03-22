@@ -16,6 +16,7 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
 
@@ -36,9 +37,10 @@ namespace crypto.ViewModels
         private bool isReady = true;
         private string progressBarMessage = "...";
         private bool isLiveTrading = false;
+        private int numOfOpenTrades = 0;
+        private double pl = 0.0;
 
         private Asset selectedAsset;
-        private double selectedAssetTickTime;
         private double selectedTickTime;
 
         private ChartValues<OhlcPoint> ohlcChartValues = new ChartValues<OhlcPoint>();
@@ -51,6 +53,9 @@ namespace crypto.ViewModels
         private ChartValues<double> macdHistogramChartValues = new ChartValues<double>();
 
         NLog.Logger logger = NLog.LogManager.GetLogger("crypto-app");
+
+        decimal balanceLowWaterMark = 275m;
+        decimal stakeSize = 250m;
 
         #endregion
 
@@ -67,6 +72,26 @@ namespace crypto.ViewModels
         /// The candle resolution in hours.
         /// </summary>
         public IList<double> TickTimes { get; private set; }
+
+        public int NumOfOpenTrades
+        {
+            get => this.numOfOpenTrades;
+            set
+            {
+                this.numOfOpenTrades = value;
+                this.RaisePropertyChanged(nameof(this.NumOfOpenTrades));
+            }
+        }
+
+        public double PL
+        {
+            get => this.pl;
+            set
+            {
+                this.pl = value;
+                this.RaisePropertyChanged(nameof(this.PL));
+            }
+        }
 
         public double SelectedTickTime
         {
@@ -85,17 +110,6 @@ namespace crypto.ViewModels
             {
                 this.isLiveTrading = value;
                 this.RaisePropertyChanged(nameof(this.IsLiveTrading));
-            }
-        }
-        public double SelectedAssetTickTime
-        {
-            get => this.selectedAssetTickTime;
-            set
-            {
-                this.selectedAssetTickTime = value;
-                this.RaisePropertyChanged(nameof(this.SelectedAssetTickTime));
-
-                this.doUpdateAssetTickTime();
             }
         }
 
@@ -196,35 +210,38 @@ namespace crypto.ViewModels
             this.MacdCollection.Add(new LineSeries() { Values = macdSignalChartValues, ScalesYAt = 0, Fill = Brushes.Transparent, PointGeometrySize = 0 });
             this.MacdCollection.Add(new ColumnSeries() { Values = macdHistogramChartValues, ScalesYAt = 0 });
 
-            this.TickTimes = new ObservableCollection<double> { 0.25, 0.5, 1, 2, 4, 8, 12, 24 };
+            this.TickTimes = new ObservableCollection<double> { 4, 8, 12};
             this.SelectedTickTime = 8;
         }
 
         private async void doSell(Asset asset)
         {
-            Dictionary<string, decimal> wallet = null;
-            wallet = await api.GetAmountsAvailableToTradeAsync();
-            var currency = asset.Ticker.Replace("USDT", string.Empty);
-            if (wallet.ContainsKey(currency))
+            if (MessageBox.Show("Confirm Sale?", "Confirmation", MessageBoxButton.OKCancel) == MessageBoxResult.OK)
             {
-                var amountAvail = wallet[currency]; // sell all.
-                try
+                Dictionary<string, decimal> wallet = null;
+                wallet = await api.GetAmountsAvailableToTradeAsync();
+                var currency = asset.Ticker.Replace("USD", string.Empty);
+                if (wallet.ContainsKey(currency))
                 {
-                    var result = await api.PlaceOrderAsync(new ExchangeOrderRequest
+                    var amountAvail = wallet[currency]; // sell all.
+                    try
                     {
-                        Amount = amountAvail,
-                        IsBuy = false,
-                        Price = asset.Bid,
-                        MarketSymbol = asset.Ticker
-                    });
+                        var result = await api.PlaceOrderAsync(new ExchangeOrderRequest
+                        {
+                            Amount = amountAvail,
+                            IsBuy = false,
+                            Price = asset.Bid,
+                            MarketSymbol = asset.Ticker
+                        });
 
-                    asset.HasTrade = false;
-                    asset.BuyPrice = 0;
-                    logger.Info($"PlaceOrderAsync-Sell. {result.MarketSymbol}, {result.OrderId}, {result.Result}");
-                }
-                catch (Exception ex)
-                {
-                    logger.Info($"PlaceOrderAsync-Sell. {ex.Message}");
+                        asset.HasTrade = false;
+                        asset.BuyPrice = 0;
+                        logger.Info($"PlaceOrderAsync-Sell. {result.MarketSymbol}, {result.OrderId}, {result.Result}");
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.Info($"PlaceOrderAsync-Sell. {ex.Message}");
+                    }
                 }
             }
         }
@@ -273,13 +290,15 @@ namespace crypto.ViewModels
         /// </summary>
         private async void executeEnumerate()
         {
-            // Get a list of markets.
+            // Get a list of markets based on USD for better liquidity.
             // remove all cryptos with 0 bid. dead coins.
             // remove all cryptos with volume less than 150K USD.
-            // BTC is included but never traded.  it is left as a reference.
-            var pairs = (await api.GetTickersAsync()).Where(p => p.Value.MarketSymbol.Contains("USDT") && 
-            p.Value.Bid > 0 && p.Value.Volume.QuoteCurrencyVolume > 150000m &&
-            !p.Value.MarketSymbol.Contains("USDTUSD")).ToList();
+            // remove BTC, ETH.
+            // remove all stable-coins.
+            var coinsToRemove = new string[] { "USDC", "BUSD", "USDT", "DAI", "BTC", "ETH", "PAX"};
+            var pairs = (await api.GetTickersAsync()).Where(p => p.Value.Volume.QuoteCurrency == "USD" &&
+            !coinsToRemove.Contains(p.Value.Volume.BaseCurrency) &&
+            p.Value.Bid > 0 && p.Value.Volume.QuoteCurrencyVolume > 150000m).OrderBy(k => k.Key).ToList();
 
             pairs.ForEach(pair =>
             {
@@ -288,12 +307,6 @@ namespace crypto.ViewModels
                     this.Assets.Add(new Asset(pair.Value.MarketSymbol));
                 }
             });
-
-            for (int i = 0; i < this.Assets.Count; i++)
-            {
-                var asset = this.Assets[i];
-                var ccc = await api.GetExchangeMarketFromCacheAsync(asset.Ticker);
-            }
 
             // Start websocket.
             // the web socket will handle disconnects and attempt to re-connect automatically.
@@ -353,14 +366,14 @@ namespace crypto.ViewModels
             numOfTickers = tickers.Count();
 
             // update wallet if live trading.
-            double usdtAvail = 0.0;
+            decimal usdtAvail = 0m;
             Dictionary<string, decimal> wallet = new Dictionary<string, decimal>();
             if (isLiveTrading)
             {
                 wallet = await api.GetAmountsAvailableToTradeAsync();
-                if (wallet.ContainsKey("USDT"))
+                if (wallet.ContainsKey("USD"))
                 {
-                    usdtAvail = (double)wallet["USDT"];
+                    usdtAvail = wallet["USD"];
                 }
             }
 
@@ -368,16 +381,26 @@ namespace crypto.ViewModels
             for (int idx = 0; idx < numOfTickers; idx++)
             {
                 var ticker = tickers[idx];
-                int periodSeconds = Convert.ToInt32(selectedTickTime * 60 * 60); // TODO: selectedTickTime locked to 8 hours for now.
-                var candles = await api.GetCandlesAsync(ticker, periodSeconds, null, DateTime.Now, 250);
-                IList<IQuote> quotes = new List<IQuote>();
-                candles.ToList().ForEach(data =>
+                // ok, this is a lazy way.  obviously you can just use a 2 or 4 hour candle to extrapolate data but just not worth the thinking...
+                int periodSeconds = Convert.ToInt32(2 * 60 * 60); // Get 2 hour candles for sell signal
+                var candlesFast = await api.GetCandlesAsync(ticker, periodSeconds, null, DateTime.Now, 250);
+                periodSeconds = Convert.ToInt32(8 * 60 * 60); // Get 8 hour candles for buy signal
+                var candlesSlow = await api.GetCandlesAsync(ticker, periodSeconds, null, DateTime.Now, 250);
+
+                IList<IQuote> quotesFast = new List<IQuote>();
+                IList<IQuote> quotesSlow = new List<IQuote>();
+                candlesFast.ToList().ForEach(data =>
                 {
-                    quotes.Add(new Quote() { Open = data.OpenPrice, Close = data.ClosePrice, Low = data.LowPrice, High = data.HighPrice, Volume = Convert.ToDecimal(data.BaseCurrencyVolume), Date = data.Timestamp });
+                    quotesFast.Add(new Quote() { Open = data.OpenPrice, Close = data.ClosePrice, Low = data.LowPrice, High = data.HighPrice, Volume = Convert.ToDecimal(data.BaseCurrencyVolume), Date = data.Timestamp });
+                });
+                candlesSlow.ToList().ForEach(data =>
+                {
+                    quotesSlow.Add(new Quote() { Open = data.OpenPrice, Close = data.ClosePrice, Low = data.LowPrice, High = data.HighPrice, Volume = Convert.ToDecimal(data.BaseCurrencyVolume), Date = data.Timestamp });
                 });
 
+
                 var asset = this.Assets.First(a => a.Ticker == ticker);
-                asset.updateQuotes(quotes);
+                asset.updateQuotes(quotesFast, quotesSlow);
 
                 // update the wallet size.
                 if (wallet.ContainsKey(asset.BaseCurrency))
@@ -391,15 +414,13 @@ namespace crypto.ViewModels
 
             this.IsReady = true;
 
-            // Buying can occur only when the time is a 12AM, 8AM and 4PM UTC.
+            // Buying can occur only when the time is a 12AM, 8AM and 4PM UTC because we are using the 8-hour candle.
             var currentUTC = DateTime.UtcNow;
             if (currentUTC.Hour == 0 || currentUTC.Hour == 8 || currentUTC.Hour == 16)
             {
                 // Check for buy signal.
-                var balanceLowWaterMark = 200;
-                var stakeSize = 100;
                 // prevent BTC from being traded.
-                var assetsToBuy = this.Assets.Where(a => !a.Ticker.Contains("BTC") && (a.MacdSummary.CrossOverSignal == TrendEnum.Up && !a.HasTrade && (double)a.Price > 0));
+                var assetsToBuy = this.Assets.Where(a => (a.MacdSummary.CrossOverSignal == TrendEnum.Up && !a.HasTrade && a.Price > 0));
                 foreach (var asset in assetsToBuy)
                 {
                     // get the number of shares to buy.
@@ -435,7 +456,7 @@ namespace crypto.ViewModels
                         }
                         else
                         {
-                            logger.Info($"{isLiveTrading}. BUY FAILED: out of money. {usdtAvail}");
+                            logger.Info($"{isLiveTrading}. BUY {asset.Ticker} FAILED: out of money. {usdtAvail}");
                         }
                     }
                     else
@@ -449,8 +470,8 @@ namespace crypto.ViewModels
             }
 
             // TODO: need to update sell condition to be more aggresive.
-            // check for sell signal.  sell once the macd trend signal changes to flat.
-            var assetsToSell = this.Assets.Where(a => !a.Ticker.Contains("BTC") && a.HasTrade && a.MacdSummary.TrendSignal == TrendEnum.None);
+            // Sell using 2-hour MACD cross-over signal
+            var assetsToSell = this.Assets.Where(a => a.HasTrade && a.MacdSummary.TrendSignalFast == TrendEnum.Down);
             foreach (var asset in assetsToSell)
             {
                 if (isLiveTrading)
@@ -495,20 +516,10 @@ namespace crypto.ViewModels
                     asset.BuyPrice = 0;
                 }
             }
-        }
 
-        private async void doUpdateAssetTickTime()
-        {
-            int periodSeconds = Convert.ToInt32(this.selectedAssetTickTime * 60 * 60);
-            var candles = await api.GetCandlesAsync(this.selectedAsset.Ticker, periodSeconds, null, DateTime.UtcNow, 240);
-            IList<IQuote> quotes = new List<IQuote>();
-            candles.ToList().ForEach(data =>
-            {
-                quotes.Add(new Quote() { Open = data.OpenPrice, Close = data.ClosePrice, Low = data.LowPrice, High = data.HighPrice, Volume = Convert.ToDecimal(data.BaseCurrencyVolume), Date = data.Timestamp });
-            });
-
-            this.selectedAsset.updateQuotes(quotes);
-            this.displayChart(this.selectedAsset);
+            // calculate some summary info.
+            var trades = this.Assets.Where(a => a.HasTrade);
+            trades.Select(t => t.UnrealizedPLPercentage).Sum();
         }
 
         private void displayChart(Asset asset)
